@@ -44,15 +44,6 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false)
   const dirInputRef = useRef<HTMLInputElement>(null)
 
-  // deep link from URL hash on load
-  useEffect(() => {
-    const { file } = parseHash()
-    if (file && analysis) {
-      const exists = analysis.files.some((f) => f.id === file)
-      if (exists) setSelectedId(file)
-    }
-  }, [analysis])
-
   // keep URL in sync (file + query)
   useEffect(() => {
     const params = new URLSearchParams()
@@ -73,6 +64,8 @@ export default function App() {
       setSelectedId(null)
       setTraceCycle(null)
       setError(null)
+      const deep = parseHash().file
+      if (deep && result.files.some((f) => f.id === deep)) setSelectedId(deep)
     },
     [],
   )

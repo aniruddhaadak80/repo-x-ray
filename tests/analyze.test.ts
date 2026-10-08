@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { analyze, extractAliases } from '../src/lib/analyze'
 import { toDot, toMermaid, toMarkdown } from '../src/lib/export'
-import type { ConfigFile, Ext, RawFile } from '../src/lib/types'
+import type { RawFile } from '../src/lib/types'
 
 function f(path: string, text: string): RawFile {
   const name = path.split('/').pop()!

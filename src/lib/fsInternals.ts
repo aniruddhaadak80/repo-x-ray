@@ -11,6 +11,9 @@ export const EXTS: Ext[] = ['js', 'jsx', 'ts', 'tsx']
 
 export const CONFIG_FILE_RE = /^(tsconfig\.[\w.]*|jsconfig\.[\w.]*|package)\.json$|(vite|webpack|rollup|next|nuxt)\.config\.[jt]s$/
 
+/** Workspace/manifest files collected at any depth (not just repo root). */
+export const ANY_DEPTH_CONFIG_RE = /^(package\.json|pnpm-workspace\.ya?ml|lerna\.json|turbo\.json|nx\.json)$/
+
 export const MAX_BYTES = 2 * 1024 * 1024
 export const MAX_JSON_BYTES = 512 * 1024
 

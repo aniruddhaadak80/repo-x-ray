@@ -11,6 +11,7 @@ import { saveScan, uuid, type ScanRecord } from './lib/snapshots'
 import type { Analysis, DepKind, Ext } from './lib/types'
 import SnapshotsPanel from './components/SnapshotsPanel'
 import CompareDialog from './components/CompareDialog'
+import CommandPalette, { type Command } from './components/CommandPalette'
 
 const ALL_EXTS: Ext[] = ['js', 'jsx', 'ts', 'tsx']
 const ALL_KINDS: DepKind[] = ['esm', 'dynamic', 'require', 'type']
@@ -44,6 +45,7 @@ export default function App() {
   const [showLabels, setShowLabels] = useState(false)
   const [traceCycle, setTraceCycle] = useState<string[] | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [resetKey, setResetKey] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [compareWith, setCompareWith] = useState<ScanRecord | null>(null)
@@ -189,6 +191,28 @@ export default function App() {
 
   const selectedFile = useMemo(() => analysis?.files.find((f) => f.id === selectedId) ?? null, [analysis, selectedId])
 
+  const paletteCommands = useMemo<Command[]>(() => {
+    if (!analysis) return []
+    const layouts: LayoutMode[] = ['force', 'TD', 'BU', 'LR', 'RL', 'radialout']
+    const colors: ColorMode[] = ['ext', 'cycle', 'problems', 'fanin', 'instability']
+    const cmds: Command[] = [
+      ...layouts.map<Command>((l) => ({ id: `layout-${l}`, label: `Layout: ${l}`, hint: 'graph', run: () => setLayout(l) })),
+      ...colors.map<Command>((c) => ({ id: `color-${c}`, label: `Color: ${c}`, hint: 'graph', run: () => setColorMode(c) })),
+      { id: 'export', label: 'Export report', hint: 'report', run: () => setReportOpen(true) },
+      { id: 'save', label: 'Save scan snapshot', hint: 'snapshot', run: async () => { await saveScan({ id: uuid(), rootName: analysis.rootName, savedAt: Date.now(), analysis }); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1600) } },
+      { id: 'compare', label: 'Compare with snapshot', hint: 'snapshot', run: () => setCompareOpen(true) },
+      { id: 'ego1', label: 'Focus neighbours (1°)', hint: 'graph', run: () => setEgoDepth(1) },
+      { id: 'ego2', label: 'Focus neighbours (2°)', hint: 'graph', run: () => setEgoDepth(2) },
+      { id: 'ego-off', label: 'Focus off (whole graph)', hint: 'graph', run: () => setEgoDepth(0) },
+      { id: 'labels', label: 'Toggle node labels', hint: 'graph', run: () => setShowLabels((v) => !v) },
+      { id: 'problems-only', label: 'Toggle problems-only filter', hint: 'filter', run: () => setProblemsOnly((v) => !v) },
+      { id: 'clear-filters', label: 'Clear filters & trace', hint: 'filter', run: () => { setQuery(''); setEnabledExts(new Set(ALL_EXTS)); setEnabledKinds(new Set(ALL_KINDS)); setProblemsOnly(false); setTraceCycle(null) } },
+      { id: 'first-cycle', label: 'Trace first cycle', hint: 'cycle', run: () => setTraceCycle(analysis.cycles[0] ?? null) },
+      { id: 'new-repo', label: 'Load another repo', hint: 'repo', run: () => { setAnalysis(null); setError(null) } },
+    ]
+    return cmds
+  }, [analysis])
+
   // keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -201,13 +225,17 @@ export default function App() {
         input?.select()
       } else if (e.key === 'Escape') {
         if (reportOpen) setReportOpen(false)
+        else if (paletteOpen) setPaletteOpen(false)
         else if (typing) (target as HTMLInputElement).blur()
         else setSelectedId(null)
+      } else if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [reportOpen])
+  }, [reportOpen, paletteOpen])
 
   if (!analysis) {
     return (
@@ -289,6 +317,14 @@ export default function App() {
         </ul>
         <div className="topbar-actions">
           <button
+            className="palette-trigger"
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            title="Command palette (Ctrl+K)"
+          >
+            ⌘K
+          </button>
+          <button
             type="button"
             onClick={async () => {
               await saveScan({ id: uuid(), rootName: analysis.rootName, savedAt: Date.now(), analysis })
@@ -366,6 +402,14 @@ export default function App() {
       {reportOpen && <ReportDialog analysis={analysis} onClose={() => setReportOpen(false)} />}
       {compareOpen && compareWith && (
         <CompareDialog before={compareWith.analysis} after={analysis} onClose={() => setCompareOpen(false)} />
+      )}
+      {paletteOpen && (
+        <CommandPalette
+          commands={paletteCommands}
+          files={analysis.files}
+          onPickFile={(id) => { setSelectedId(id); setTraceCycle(null) }}
+          onClose={() => setPaletteOpen(false)}
+        />
       )}
     </div>
   )

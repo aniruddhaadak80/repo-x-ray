@@ -191,6 +191,27 @@ export default function Sidebar(props: Props) {
             ))}
             {metrics.entryPoints.length === 0 && <li><span className="muted">None detected</span></li>}
           </ul>
+          {analysis.packages.length > 1 && (
+            <>
+              <h2>Workspace packages ({analysis.packages.length})</h2>
+              <ul className="mini-list">
+                {analysis.packages.map((p) => (
+                  <li key={p.dir}>
+                    <span className="pkg-name" title={p.dir}>{p.name}</span>
+                    <span className="muted">{p.fileCount} files</span>
+                  </li>
+                ))}
+              </ul>
+              <ul className="mini-list">
+                {analysis.packages.filter((p) => p.dependsOn.length > 0).slice(0, 8).map((p) => (
+                  <li key={`deps-${p.dir}`}>
+                    <span className="muted">{p.name} →</span>
+                    <span>{p.dependsOn.join(', ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <h2>Orphans ({metrics.orphans.length})</h2>
           <OrphanList analysis={analysis} onSelect={onSelect} />
         </section>

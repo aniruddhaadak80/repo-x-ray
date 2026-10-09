@@ -1,5 +1,5 @@
 import type { ConfigFile, Ext, RawFile } from './types'
-import { SKIP_DIRS, EXTS, CONFIG_FILE_RE, MAX_BYTES, MAX_JSON_BYTES, toConfigFile, toPosix } from './fsInternals'
+import { SKIP_DIRS, EXTS, CONFIG_FILE_RE, ANY_DEPTH_CONFIG_RE, MAX_BYTES, MAX_JSON_BYTES, toConfigFile, toPosix } from './fsInternals'
 
 interface Entry {
   kind: 'file' | 'directory'
@@ -27,12 +27,13 @@ async function walk(dir: Entry, prefix: string, files: RawFile[], configs: Confi
     const lower = rel.toLowerCase()
     const ext = (EXTS as string[]).find((e) => lower.endsWith(`.${e}`)) as Ext | undefined
     const isConfig = rel.split('/').length === 1 && CONFIG_FILE_RE.test(entry.name)
-    if (!ext && !isConfig) continue
+    const isWorkspaceConfig = ANY_DEPTH_CONFIG_RE.test(entry.name)
+    if (!ext && !isConfig && !isWorkspaceConfig) continue
     const file = await entry.getFile!()
-    if (file.size > (isConfig ? MAX_JSON_BYTES : MAX_BYTES)) continue
+    if (file.size > (isConfig || isWorkspaceConfig ? MAX_JSON_BYTES : MAX_BYTES)) continue
     const path = rel
     const text = await file.text()
     if (ext) files.push({ path, name: entry.name, ext, text })
-    if (isConfig) configs.push(toConfigFile(path, text))
+    if (isConfig || isWorkspaceConfig) configs.push(toConfigFile(path, text))
   }
 }

@@ -145,6 +145,32 @@ describe('extra detectors', () => {
   })
 })
 
+describe('monorepo detection', () => {
+  it('detects workspace packages and their dependencies', () => {
+    const files = [
+      f('packages/web/src/App.tsx', `import { api } from '@repo/api'\nimport './style.css'`),
+      f('packages/api/src/index.ts', `export const api = 1`),
+      f('packages/api/src/routes.ts', `import '../../db'`),
+      f('packages/db/index.ts', `export const db = 1`),
+      f('src/main.ts', `import { api } from '@repo/api'`),
+    ]
+    const configs: ConfigFile[] = [
+      cfg('package.json', { workspaces: ['packages/*'] }),
+      cfg('packages/web/package.json', { name: '@repo/web' }),
+      cfg('packages/api/package.json', { name: '@repo/api' }),
+      cfg('packages/db/package.json', { name: '@repo/db' }),
+    ]
+    const a = analyze(files, 'mono', configs)
+    const byDir = new Map(a.packages.map((p) => [p.dir, p]))
+    expect(byDir.has('packages/web')).toBe(true)
+    expect(byDir.has('packages/api')).toBe(true)
+    expect(byDir.has('packages/db')).toBe(true)
+    expect(byDir.get('packages/web')!.name).toBe('@repo/web')
+    // web imports @repo/api → api; api imports packages/db file → db
+    expect(byDir.get('packages/api')!.dependsOn).toEqual(['packages/db'])
+  })
+})
+
 describe('exports', () => {
   const files = [f('src/a.ts', `import './b'`), f('src/b.ts', `import './a'`)]
   const a = analyze(files, 'demo')

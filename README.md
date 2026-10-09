@@ -13,10 +13,11 @@ Pick a repo (native File System Access folder picker in Chrome/Edge, `<input web
 - Resolves relative paths (`.ts/.tsx/.js/.jsx/.mjs/.cjs`, `index.*`) **and tsconfig/jsconfig `paths` + vite/webpack aliases** (`@/…`, `~/…`)
 - Flags unresolved relative imports, circular dependencies (Tarjan SCC), mixed ESM+`require()` files
 - Computes coupling metrics: fan-in/fan-out, instability, entry points, orphans, directory coupling, deepest chains
+- Detects workspace packages (pnpm/npm workspaces, lerna, nested `package.json`) with package-level dependency edges
 
 ### The graph
 
-Force-directed canvas graph (`react-force-graph-2d`) with:
+Force-directed canvas graph (`react-force-graph-2d`, analyzed in a Web Worker so the UI never blocks) with:
 
 - 6 layouts: force / tree ↓ ↑ → ← / radial
 - Color modes: extension, cycles, problems, fan-in, instability (heat)
@@ -29,11 +30,19 @@ Click a node for path, extension, LOC, fan-in/out, stability meter, imports (kin
 
 ### Search & filters
 
-Path search (`/` shortcut), extension toggles, edge-kind toggles, "problems only" mode, cycles tab with per-cycle tracing, metrics tab. `Esc` clears the selection. State is deep-linkable (`#file=…&q=…`).
+Path search (`/` shortcut), extension toggles, edge-kind toggles, "problems only" mode, cycles tab with per-cycle tracing, metrics tab, and a **⌘K command palette** (fuzzy file jump + commands). `Esc` clears the selection. State is deep-linkable (`#file=…&q=…`).
+
+### Snapshots & compare
+
+Save scans to IndexedDB (Save scan), then pick any saved scan as the "before" side and hit Compare to diff files/edges/cycles/problems against the current repo.
 
 ### Export
 
 JSON report, Graphviz DOT, Mermaid flowchart, or a Markdown summary — copy to clipboard or download.
+
+### PWA
+
+Installable (manifest + icons + offline shell via service worker) — once loaded it works with no network.
 
 ## Run
 
@@ -41,11 +50,11 @@ JSON report, Graphviz DOT, Mermaid flowchart, or a Markdown summary — copy to 
 bun install
 bun dev          # http://localhost:5173
 bun run build    # production build
-bun test         # 23 unit tests
+bun test         # 30 unit tests
 bun run scripts/smoke.ts <repoPath>   # analyzer smoke test on a real repo
 ```
 
-Verified against real repos: 1318-file repo → 634ms, detects a 24-file circular cluster.
+Stress-tested on real repos: the 9,641-file Expensify `App` repo → 36 cycles found in ~4.8s (in a Web Worker).
 
 ## Layout
 

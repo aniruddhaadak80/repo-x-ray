@@ -1,4 +1,4 @@
-import type { Analysis, ConfigFile, DepKind, Ext, FileInfo, GraphEdge, Metrics, RawFile } from './types'
+import type { Analysis, ConfigFile, DepKind, Ext, FileInfo, GraphEdge, Metrics, PackageInfo, RawFile } from './types'
 import { parseImports } from './parser'
 
 const RESOLVE_EXTS = ['tsx', 'ts', 'jsx', 'js', 'mts', 'cts', 'mjs', 'cjs']
@@ -182,6 +182,69 @@ function longestChains(files: FileInfo[], cycles: string[][]): string[][] {
   return [...best.values()].sort((a, b) => b.length - a.length).slice(0, 5)
 }
 
+/** Detect workspace packages: root package.json "workspaces", pnpm-workspace.yaml, lerna.json, and nested package.json dirs. */
+function detectPackages(files: FileInfo[], configs: ConfigFile[]): PackageInfo[] {
+  const packageDirs = new Set<string>(['.'])
+  for (const cfg of configs) {
+    if (!cfg.json) continue
+    if (cfg.path.endsWith('package.json')) {
+      const pkg = cfg.json as Record<string, unknown>
+      const ws = pkg.workspaces
+      const patterns: string[] = []
+      if (Array.isArray(ws)) patterns.push(...(ws as string[]))
+      else if (ws && typeof ws === 'object') patterns.push(...((ws as { packages?: string[] }).packages ?? []))
+      for (const pat of patterns) {
+        const dir = normalize(pat.replace(/\/\*.*$/, ''))
+        if (dir) packageDirs.add(dir)
+      }
+    }
+    if (cfg.path.endsWith('pnpm-workspace.yaml')) {
+      const pats = [...cfg.text.matchAll(/^\s*-\s*['"]?([^'"\n#]+?)['"]?\s*$/gm)].map((m) => m[1])
+      for (const pat of pats) {
+        const dir = normalize(pat.trim().replace(/\/\*.*$/, ''))
+        if (dir) packageDirs.add(dir)
+      }
+    }
+    if (cfg.path.endsWith('lerna.json')) {
+      const pats = (cfg.json as { packages?: string[] }).packages
+      for (const pat of pats ?? []) packageDirs.add(normalize(pat.replace(/\/\*.*$/, '')))
+    }
+  }
+  // nested package.json dirs count as packages too
+  for (const cfg of configs) {
+    if (!cfg.path.endsWith('package.json')) continue
+    const dir = dirname(cfg.path) || '.'
+    if (dir !== '.' && !dir.includes('node_modules')) packageDirs.add(dir)
+  }
+
+  const packages: PackageInfo[] = []
+  const dirs = [...packageDirs].filter((d) => d === '.' || files.some((f) => f.path.startsWith(`${d}/`)))
+  const pkgNames = new Map<string, string>()
+  for (const cfg of configs) {
+    if (!cfg.path.endsWith('package.json') || !cfg.json) continue
+    const name = (cfg.json as { name?: unknown }).name
+    if (typeof name === 'string') pkgNames.set(dirname(cfg.path) || '.', name)
+  }
+  for (const dir of dirs) {
+    const own = files.filter((f) => (dir === '.' ? true : f.path.startsWith(`${dir}/`)))
+    const depends = new Set<string>()
+    for (const f of own) {
+      for (const r of f.imports) {
+        if (!r.resolved) continue
+        const targetDir = dirname(r.resolved) || '.'
+        if (targetDir === dir || targetDir === '.') continue
+        const owner = dirs
+          .filter((d) => d !== '.' && (targetDir === d || targetDir.startsWith(`${d}/`)))
+          .sort((a, b) => b.length - a.length)[0]
+        if (owner) depends.add(owner)
+      }
+    }
+    const name = pkgNames.get(dir) ?? (dir === '.' ? '(root)' : dir.split('/').pop()!)
+    packages.push({ name, dir, fileCount: own.length, dependsOn: [...depends].sort() })
+  }
+  return packages.filter((p) => p.fileCount > 0)
+}
+
 function computeMetrics(files: FileInfo[], cycles: string[][], entries: Set<string>): Metrics {
   const fanInTop = [...files].sort((a, b) => b.fanIn - a.fanIn).slice(0, 5)
   const fanOutTop = [...files].sort((a, b) => b.fanOut - a.fanOut).slice(0, 5)
@@ -356,6 +419,7 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
     cycles,
     aliases: aliases.map((a) => ({ pattern: a.pattern, target: a.target })),
     metrics: { ...computeMetrics(files, cycles, entrySet), deepestChains: deepest },
+    packages: detectPackages(files, configs),
     stats: {
       files: files.length,
       edges: edges.length,

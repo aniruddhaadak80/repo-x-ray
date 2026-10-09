@@ -3,6 +3,7 @@ import type { ConfigFile, Ext, RawFile } from './types'
 const EXTS: Ext[] = ['js', 'jsx', 'ts', 'tsx']
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', '.next', '.cache', '.turbo', '.svelte-kit', '.output', '.vercel', '.netlify'])
 const CONFIG_FILE_RE = /^(tsconfig\.[\w.]*|jsconfig\.[\w.]*|package)\.json$|(vite|webpack|rollup|next|nuxt)\.config\.[jt]s$/
+const ANY_DEPTH_CONFIG_RE = /^(package\.json|pnpm-workspace\.ya?ml|lerna\.json|turbo\.json|nx\.json)$/
 const MAX_BYTES = 2 * 1024 * 1024
 const MAX_JSON_BYTES = 512 * 1024
 
@@ -55,12 +56,14 @@ async function walkFsHandle(
       const fh = entry as unknown as FileHandle
       const ext = extOf(fh.name)
       const isConfig = prefix === '' && CONFIG_FILE_RE.test(fh.name)
-      if (!ext && !isConfig) continue
+      const isWorkspaceConfig = ANY_DEPTH_CONFIG_RE.test(fh.name)
+      if (!ext && !isConfig && !isWorkspaceConfig) continue
       const file = await fh.getFile()
-      if (file.size > (isConfig ? MAX_JSON_BYTES : MAX_BYTES)) continue
+      if (file.size > (isConfig || isWorkspaceConfig ? MAX_JSON_BYTES : MAX_BYTES)) continue
       const text = await file.text()
-      if (ext) files.push({ path: `${prefix}${file.name}`, name: file.name, ext, text })
-      if (isConfig) configs.push(readConfig(`${prefix}${file.name}`, text))
+      const path = `${prefix}${file.name}`
+      if (ext) files.push({ path, name: file.name, ext, text })
+      if (isConfig || isWorkspaceConfig) configs.push(readConfig(path, text))
       onProgress?.(files.length + configs.length)
     }
   }
@@ -76,14 +79,15 @@ export async function readFilesFromInput(fileList: FileList): Promise<LoadedRepo
     const rel = file.webkitRelativePath // "<root>/a/b/c.ts"
     const segs = toPosix(rel).split('/')
     const isConfig = segs.length === 2 && CONFIG_FILE_RE.test(file.name)
+    const isWorkspaceConfig = ANY_DEPTH_CONFIG_RE.test(file.name)
     const ext = extOf(file.name)
-    if (!ext && !isConfig) continue
+    if (!ext && !isConfig && !isWorkspaceConfig) continue
     if (segs.slice(1, -1).some((s) => SKIP_DIRS.has(s))) continue
     if (file.size > (isConfig ? MAX_JSON_BYTES : MAX_BYTES)) continue
     const text = await file.text()
     const path = segs.slice(1).join('/')
     if (ext) files.push({ path, name: file.name, ext, text })
-    if (isConfig) configs.push(readConfig(path, text))
+    if (isConfig || isWorkspaceConfig) configs.push(readConfig(path, text))
   }
   return { rootName, files, configs }
 }

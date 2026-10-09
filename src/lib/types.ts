@@ -51,12 +51,20 @@ export interface Metrics {
   deepestChains: string[][]
 }
 
+export interface PackageInfo {
+  name: string // "utils" or "@scope/utils"
+  dir: string // "packages/utils" or "." for root
+  fileCount: number
+  dependsOn: string[] // package dirs imported by this package's files
+}
+
 export interface Analysis {
   rootName: string
   files: FileInfo[]
   edges: GraphEdge[]
   cycles: string[][] // each cycle is a list of file ids
   aliases: { pattern: string; target: string }[]
+  packages: PackageInfo[]
   metrics: Metrics
   stats: {
     files: number

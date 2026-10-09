@@ -120,6 +120,31 @@ describe('metrics', () => {
   })
 })
 
+describe('extra detectors', () => {
+  it('flags barrel files', () => {
+    const files = [
+      f('src/index.ts', `export * from './a'\nexport * from './b'`),
+      f('src/a.ts', `export const a = 1`),
+      f('src/b.ts', `export const b = 1`),
+    ]
+    const a = analyze(files, 'app')
+    expect(a.files[0].problems.some((p) => p.startsWith('Barrel'))).toBe(true)
+  })
+
+  it('flags long dependency chains', () => {
+    const files = Array.from({ length: 12 }, (_, i) => f(`f${i}.ts`, i === 11 ? '' : `import './f${i + 1}'`))
+    const a = analyze(files, 'app')
+    expect(a.files[0].problems.some((p) => p.startsWith('Long dependency chain'))).toBe(true)
+    expect(a.metrics.deepestChains[0]).toHaveLength(12)
+  })
+
+  it('flags orphan test files', () => {
+    const files = [f('a.test.ts', `import './b'`), f('b.ts', ``)]
+    const a = analyze(files, 'app')
+    expect(a.files[0].problems.some((p) => p.startsWith('Test file is never imported'))).toBe(true)
+  })
+})
+
 describe('exports', () => {
   const files = [f('src/a.ts', `import './b'`), f('src/b.ts', `import './a'`)]
   const a = analyze(files, 'demo')

@@ -54,14 +54,17 @@ export function parseImports(source: string): ImportRef[] {
     esm.push(ref(m[2], kind, src, m.index))
   }
 
+  // `export ... from` re-exports are imports too
+  const reexports: ImportRef[] = []
+  REEXPORT_RE.lastIndex = 0
+  while ((m = REEXPORT_RE.exec(src))) {
+    const r = ref(m[1], 'esm', src, m.index)
+    r.reexport = true
+    reexports.push(r)
+  }
+
   const subpaths = collect(SUBPATH_RE, src, 'esm')
-  return dedupe([
-    ...esm,
-    ...collect(REEXPORT_RE, src, 'esm'),
-    ...collect(DYNAMIC_RE, src, 'dynamic'),
-    ...collect(REQUIRE_RE, src, 'require'),
-    ...subpaths,
-  ])
+  return dedupe([...esm, ...reexports, ...collect(DYNAMIC_RE, src, 'dynamic'), ...collect(REQUIRE_RE, src, 'require'), ...subpaths])
 }
 
 function dedupe(refs: ImportRef[]): ImportRef[] {

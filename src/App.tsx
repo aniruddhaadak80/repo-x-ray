@@ -5,8 +5,12 @@ import Sidebar from './components/Sidebar'
 import DetailsPanel from './components/DetailsPanel'
 import ReportDialog from './components/ReportDialog'
 import { analyze } from './lib/analyze'
+import { runAnalysis } from './lib/runAnalysis'
 import { fsAccessSupported, pickRepoViaFsAccess, readFilesFromInput } from './lib/fs'
+import { saveScan, uuid, type ScanRecord } from './lib/snapshots'
 import type { Analysis, DepKind, Ext } from './lib/types'
+import SnapshotsPanel from './components/SnapshotsPanel'
+import CompareDialog from './components/CompareDialog'
 
 const ALL_EXTS: Ext[] = ['js', 'jsx', 'ts', 'tsx']
 const ALL_KINDS: DepKind[] = ['esm', 'dynamic', 'require', 'type']
@@ -42,6 +46,9 @@ export default function App() {
   const [reportOpen, setReportOpen] = useState(false)
   const [resetKey, setResetKey] = useState(0)
   const [dragOver, setDragOver] = useState(false)
+  const [compareWith, setCompareWith] = useState<ScanRecord | null>(null)
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
   const dirInputRef = useRef<HTMLInputElement>(null)
 
   // keep URL in sync (file + query)
@@ -59,13 +66,23 @@ export default function App() {
         setError('No .js/.jsx/.ts/.tsx files found in the selected folder.')
         return
       }
-      const result = analyze(loaded.files, loaded.rootName, loaded.configs ?? [])
-      setAnalysis(result)
-      setSelectedId(null)
-      setTraceCycle(null)
-      setError(null)
-      const deep = parseHash().file
-      if (deep && result.files.some((f) => f.id === deep)) setSelectedId(deep)
+      return runAnalysis(loaded.rootName, loaded.files, loaded.configs ?? [])
+        .then((result) => {
+          setAnalysis(result)
+          setSelectedId(null)
+          setTraceCycle(null)
+          setError(null)
+          setLoading(false)
+          setProgress(null)
+          const deep = parseHash().file
+          if (deep && result.files.some((f) => f.id === deep)) setSelectedId(deep)
+        })
+        .catch((e) => {
+          console.error(e)
+          setError(`Analysis failed: ${e instanceof Error ? e.message : String(e)}`)
+          setLoading(false)
+          setProgress(null)
+        })
     },
     [],
   )
@@ -271,6 +288,24 @@ export default function App() {
           <li><b>{s.scannedMs}ms</b></li>
         </ul>
         <div className="topbar-actions">
+          <button
+            type="button"
+            onClick={async () => {
+              await saveScan({ id: uuid(), rootName: analysis.rootName, savedAt: Date.now(), analysis })
+              setSavedFlash(true)
+              setTimeout(() => setSavedFlash(false), 1600)
+            }}
+          >
+            {savedFlash ? 'Saved ✓' : 'Save scan'}
+          </button>
+          <button
+            type="button"
+            disabled={!compareWith}
+            title={compareWith ? 'Compare current repo with selected snapshot' : 'Pick a snapshot in the Snapshots tab first'}
+            onClick={() => setCompareOpen(true)}
+          >
+            Compare
+          </button>
           <button type="button" onClick={() => { setAnalysis(null); setError(null) }}>New repo</button>
           <button type="button" className="primary" onClick={() => setReportOpen(true)}>Export report</button>
         </div>
@@ -289,6 +324,14 @@ export default function App() {
         onSelect={(id) => { setSelectedId(id); setTraceCycle(null) }}
         onTraceCycle={setTraceCycle}
         tracedCycle={traceCycle}
+        snapshotsTab={
+          <SnapshotsPanel
+            currentRoot={analysis.rootName}
+            onLoad={(a) => { setAnalysis(a); setSelectedId(null); setTraceCycle(null) }}
+            compareId={compareWith?.id ?? null}
+            onCompareSelect={setCompareWith}
+          />
+        }
       />
       <main className="stage">
         <GraphControls
@@ -321,6 +364,9 @@ export default function App() {
       </main>
       <DetailsPanel file={selectedFile} onSelect={setSelectedId} />
       {reportOpen && <ReportDialog analysis={analysis} onClose={() => setReportOpen(false)} />}
+      {compareOpen && compareWith && (
+        <CompareDialog before={compareWith.analysis} after={analysis} onClose={() => setCompareOpen(false)} />
+      )}
     </div>
   )
 }

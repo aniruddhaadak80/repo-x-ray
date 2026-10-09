@@ -14,6 +14,8 @@ export interface ImportRef {
   external: boolean
   /** alias used to resolve (e.g. "@/*") when applicable */
   viaAlias?: string
+  /** true for `export … from` re-exports */
+  reexport?: boolean
 }
 
 export interface FileInfo {

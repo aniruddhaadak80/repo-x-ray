@@ -324,3 +324,24 @@ input:focus-visible, button:focus-visible { outline: 2px solid #4f7cff; outline-
 .modal-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid #1e2740; }
 .modal-actions { display: flex; gap: 8px; align-items: center; }
 .code-preview { margin: 0; padding: 16px; overflow: auto; font: 11px/1.55 ui-monospace, "Cascadia Code", Menlo, monospace; color: #a7b3d0; white-space: pre; }
+
+/* ---------- Snapshots ---------- */
+.scan-list { list-style: none; padding: 0; margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.scan-list li { background: #131a2a; border: 1px solid #2a3550; border-radius: 8px; padding: 8px 10px; }
+.scan-list li.selected { border-color: #3b82f6; }
+.scan-radio { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.scan-name { font-weight: 600; font-size: 13px; }
+.scan-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; margin: 4px 0 6px; }
+.scan-actions { display: flex; gap: 6px; }
+
+/* ---------- Compare dialog ---------- */
+.diff-summary { gap: 18px; font-size: 12px; }
+.diff-summary b { color: #e2e8f0; }
+.diff-body { padding: 14px 16px; overflow: auto; }
+.diff-block { margin-bottom: 10px; }
+.diff-head { display: flex; align-items: center; gap: 8px; width: 100%; background: #131a2a; border: 1px solid #2a3550; font-size: 12px; padding: 7px 10px; }
+.diff-dot { width: 8px; height: 8px; border-radius: 50%; }
+.diff-dot.add { background: #34d399; }
+.diff-dot.del { background: #f87171; }
+.diff-dot.chg { background: #fbbf24; }
+.diff-list { list-style: none; padding: 6px 0 2px 16px; margin: 0; max-height: 220px; overflow: auto; font-size: 12px; }

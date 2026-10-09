@@ -307,6 +307,11 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
   const entrySet = detectEntries(files, configs)
   for (const f of files) f.isEntry = entrySet.has(f.id) && f.fanIn === 0
 
+  const deepest = longestChains(files, cycles)
+  const deepNodes = new Set(deepest.filter((c) => c.length >= 10).flat())
+  const basenameCounts = new Map<string, number>()
+  for (const f of files) basenameCounts.set(f.name, (basenameCounts.get(f.name) ?? 0) + 1)
+
   for (const f of files) {
     const problems: string[] = []
     if (f.inCycle) {
@@ -319,6 +324,20 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
     const kinds = new Set(f.imports.map((r) => r.kind))
     if (kinds.has('require') && (kinds.has('esm') || kinds.has('dynamic'))) {
       problems.push('Mixes require() with ESM imports/dynamic imports')
+    }
+    // barrel: every import is a re-export (index that only forwards)
+    if (f.imports.length > 0 && f.imports.every((r) => r.reexport)) {
+      problems.push('Barrel file — re-exports everything it imports (bundler caveat: can hide cycles and bloat bundles)')
+    }
+    if (deepNodes.has(f.id)) {
+      const chain = deepest.find((c) => c.includes(f.id))!
+      problems.push(`Long dependency chain (${chain.length} files): ${chain.join(' → ')}`)
+    }
+    if ((basenameCounts.get(f.name) ?? 0) > 1 && f.ext === 'ts' && /^index\.(ts|tsx)$/.test(f.name)) {
+      problems.push(`Duplicate basename '${f.name}' in ${basenameCounts.get(f.name)} directories`)
+    }
+    if (/\.(test|spec)\.[jt]sx?$/.test(f.name) && f.fanIn === 0) {
+      problems.push('Test file is never imported — run it via your test runner, not worth graphing')
     }
     f.problems = problems
   }
@@ -336,7 +355,7 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
     edges,
     cycles,
     aliases: aliases.map((a) => ({ pattern: a.pattern, target: a.target })),
-    metrics: computeMetrics(files, cycles, entrySet),
+    metrics: { ...computeMetrics(files, cycles, entrySet), deepestChains: deepest },
     stats: {
       files: files.length,
       edges: edges.length,

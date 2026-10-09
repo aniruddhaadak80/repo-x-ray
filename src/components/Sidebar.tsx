@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { Analysis, Ext, FileInfo } from '../lib/types'
 
 interface Props {
@@ -15,7 +15,10 @@ interface Props {
   onSelect: (id: string) => void
   onTraceCycle: (cycle: string[] | null) => void
   tracedCycle: string[] | null
+  snapshotsTab: ReactNode
 }
+
+type Tab = 'files' | 'cycles' | 'metrics' | 'snapshots'
 
 const EXT_LABELS: { ext: Ext; label: string; color: string }[] = [
   { ext: 'ts', label: '.ts', color: '#3b82f6' },
@@ -29,8 +32,6 @@ const KIND_LABELS: { kind: 'esm' | 'dynamic' | 'require' | 'type'; label: string
   { kind: 'dynamic', label: 'dynamic' },
   { kind: 'require', label: 'require' },
 ]
-
-type Tab = 'files' | 'cycles' | 'metrics'
 
 export default function Sidebar(props: Props) {
   const { analysis, query, onQuery, enabledExts, onToggleExt, problemsOnly, onProblemsOnly, enabledKinds, onToggleKind, selectedId, onSelect, onTraceCycle, tracedCycle } = props
@@ -76,7 +77,7 @@ export default function Sidebar(props: Props) {
       </section>
 
       <nav className="tabs" role="tablist">
-        {(['files', 'cycles', 'metrics'] as Tab[]).map((t) => (
+        {(['files', 'cycles', 'metrics', 'snapshots'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -85,7 +86,7 @@ export default function Sidebar(props: Props) {
             className={`tab${tab === t ? ' active' : ''}`}
             onClick={() => setTab(t)}
           >
-            {t === 'cycles' ? `Cycles (${cycles.length})` : t === 'metrics' ? 'Metrics' : 'Files'}
+            {t === 'cycles' ? `Cycles (${cycles.length})` : t === 'metrics' ? 'Metrics' : t === 'snapshots' ? 'Snapshots' : 'Files'}
           </button>
         ))}
       </nav>
@@ -194,6 +195,8 @@ export default function Sidebar(props: Props) {
           <OrphanList analysis={analysis} onSelect={onSelect} />
         </section>
       )}
+
+      {tab === 'snapshots' && <section className="panel">{props.snapshotsTab}</section>}
     </aside>
   )
 }

@@ -49,6 +49,8 @@ export interface Metrics {
   entryPoints: string[]
   directoryCoupling: { a: string; b: string; count: number }[]
   deepestChains: string[][]
+  depIssues: DepIssue[]
+  depCount: number
 }
 
 export interface PackageInfo {
@@ -56,6 +58,15 @@ export interface PackageInfo {
   dir: string // "packages/utils" or "." for root
   fileCount: number
   dependsOn: string[] // package dirs imported by this package's files
+}
+
+export interface DepIssue {
+  name: string
+  spec: string
+  kind: 'prod' | 'dev' | 'peer' | 'optional'
+  declaredIn: string
+  level: 'warn' | 'info'
+  message: string
 }
 
 export interface Analysis {
@@ -77,6 +88,7 @@ export interface Analysis {
     byKind: Record<DepKind, number>
     loc: number
     scannedMs: number
+    engine: 'regex' | 'typescript-ast'
   }
 }
 

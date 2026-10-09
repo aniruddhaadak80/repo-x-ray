@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GraphView, { type ColorMode, type LayoutMode } from './components/GraphView'
 import GraphControls from './components/GraphControls'
 import Sidebar from './components/Sidebar'
@@ -12,6 +12,7 @@ import type { Analysis, DepKind, Ext } from './lib/types'
 import SnapshotsPanel from './components/SnapshotsPanel'
 import CompareDialog from './components/CompareDialog'
 import CommandPalette, { type Command } from './components/CommandPalette'
+import FixesPanel from './components/FixesPanel'
 
 const ALL_EXTS: Ext[] = ['js', 'jsx', 'ts', 'tsx']
 const ALL_KINDS: DepKind[] = ['esm', 'dynamic', 'require', 'type']
@@ -27,6 +28,11 @@ function parseHash(): HashState {
   if (params.get('file')) state.file = params.get('file')!
   if (params.get('q')) state.q = params.get('q')!
   return state
+}
+
+/** thin wrapper so the fixes panel re-renders with selection changes */
+function FixesTab({ analysis, selectedId, onSelect }: { analysis: Analysis; selectedId: string | null; onSelect: (id: string) => void }) {
+  return <FixesPanel key={selectedId ?? 'none'} analysis={analysis} fileId={selectedId} onSelect={onSelect} />
 }
 
 export default function App() {
@@ -48,6 +54,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [resetKey, setResetKey] = useState(0)
   const [dragOver, setDragOver] = useState(false)
+  const [parseMode, setParseMode] = useState<'regex' | 'ast' | 'hybrid'>('regex')
   const [compareWith, setCompareWith] = useState<ScanRecord | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -68,7 +75,7 @@ export default function App() {
         setError('No .js/.jsx/.ts/.tsx files found in the selected folder.')
         return
       }
-      return runAnalysis(loaded.rootName, loaded.files, loaded.configs ?? [])
+      return runAnalysis(loaded.rootName, loaded.files, loaded.configs ?? [], parseMode)
         .then((result) => {
           setAnalysis(result)
           setSelectedId(null)
@@ -86,7 +93,7 @@ export default function App() {
           setProgress(null)
         })
     },
-    [],
+    [parseMode],
   )
 
   const pickFolder = useCallback(async () => {
@@ -245,25 +252,28 @@ export default function App() {
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
       >
+        <div className="landing-bg" aria-hidden />
         <div className="landing-card">
           <div className="logo">
-            <span className="logo-mark">â—‰</span>
+            <span className="logo-mark">◉</span>
             <h1>Repo X-Ray</h1>
           </div>
           <p className="lede">
-            Scan any local JavaScript or TypeScript repository for imports, dynamic
-            imports, <code>require()</code> calls, aliased imports, unresolved
-            dependencies and circular dependencies â€” then explore them in an
-            interactive dependency graph. Everything runs in your browser; no files
-            ever leave your machine.
+            Point it at a local JavaScript or TypeScript repository and see the whole
+            dependency graph — imports, dynamic imports, <code>require()</code> calls,
+            aliases, circular dependencies and unresolved paths — rendered as an
+            interactive force graph you can click, trace and export.
+          </p>
+          <p className="sub-lede">
+            Everything runs in your browser. No backend, no uploads — your code never leaves this tab.
           </p>
           <div className="landing-actions">
             {fsAccessSupported() && (
-              <button type="button" className="primary" onClick={pickFolder} disabled={loading}>
-                {loading ? (progress ?? 'Scanningâ€¦') : 'Select repository folder'}
+              <button type="button" className="primary lg" onClick={pickFolder} disabled={loading}>
+                {loading ? (progress ?? 'Scanning…') : 'Select repository folder'}
               </button>
             )}
-            <button type="button" onClick={() => dirInputRef.current?.click()} disabled={loading} className={fsAccessSupported() ? 'ghost' : ''}>
+            <button type="button" className={fsAccessSupported() ? 'ghost lg' : 'primary lg'} onClick={() => dirInputRef.current?.click()} disabled={loading}>
               Select folder (compat)
             </button>
             <input
@@ -279,16 +289,47 @@ export default function App() {
           </div>
           {error && <p className="error">{error}</p>}
           {loading && <div className="progress"><div className="progress-bar" /></div>}
+          <div className="feature-grid">
+            <div className="feature">
+              <span className="f-icon f-cyan">◇</span>
+              <h3>Interactive graph</h3>
+              <p>Force-directed canvas with 6 layouts, ego focus, cycle tracing, zoom &amp; drag.</p>
+            </div>
+            <div className="feature">
+              <span className="f-icon f-blue">⌘</span>
+              <h3>Deep scanning</h3>
+              <p>ES imports, dynamic <code>import()</code>, <code>require()</code>, re-exports, type-only imports, tsconfig aliases.</p>
+            </div>
+            <div className="feature">
+              <span className="f-icon f-orange">↻</span>
+              <h3>Cycle detection</h3>
+              <p>Tarjan SCC finds every circular dependency — including 20-file mega-cycles.</p>
+            </div>
+            <div className="feature">
+              <span className="f-icon f-pink">✦</span>
+              <h3>Fix suggestions</h3>
+              <p>Moved-file candidates, cycle break points, ESM unification — copy-ready snippets.</p>
+            </div>
+            <div className="feature">
+              <span className="f-icon f-green">⤓</span>
+              <h3>Reports</h3>
+              <p>Export JSON, Graphviz DOT, Mermaid or Markdown. Diff two scans side by side.</p>
+            </div>
+            <div className="feature">
+              <span className="f-icon f-violet">▣</span>
+              <h3>Workspaces</h3>
+              <p>pnpm / npm / lerna / turbo monorepos with package-level dependency edges.</p>
+            </div>
+          </div>
           <ul className="landing-notes">
-            <li>Analyzes <b>.js .jsx .ts .tsx</b></li>
-            <li><b>tsconfig/vite aliases</b> resolved</li>
-            <li><b>Circular deps</b> &amp; unresolved imports flagged</li>
-            <li>JSON / DOT / Mermaid / Markdown export</li>
-            <li>Drag &amp; drop a folder</li>
+            <li><b>.js .jsx .ts .tsx</b></li>
+            <li>⌘K command palette</li>
+            <li>PWA — works offline</li>
+            <li>drag &amp; drop a folder</li>
           </ul>
           {!fsAccessSupported() && (
             <p className="muted small">
-              Your browser doesnâ€™t support direct folder picking â€” use Chrome or Edge for the
+              Your browser doesn’t support direct folder picking — use Chrome or Edge for the
               native picker, or drop a folder onto this page.
             </p>
           )}
@@ -302,7 +343,7 @@ export default function App() {
     <div className="workbench">
       <header className="topbar">
         <div className="brand">
-          <span className="logo-mark">â—‰</span>
+          <span className="logo-mark">—‰</span>
           <h1>Repo X-Ray</h1>
         </div>
         <span className="root-name" title={analysis.rootName}>{analysis.rootName}</span>
@@ -314,6 +355,7 @@ export default function App() {
           <li><b>{(s.loc / 1000).toFixed(1)}k</b> LOC</li>
           {s.aliasedEdges > 0 && <li><b>{s.aliasedEdges}</b> aliased</li>}
           <li><b>{s.scannedMs}ms</b></li>
+          <li title="import scanner engine"><b>{s.engine === 'typescript-ast' ? 'AST' : 'regex'}</b></li>
         </ul>
         <div className="topbar-actions">
           <button
@@ -324,6 +366,14 @@ export default function App() {
           >
             ⌘K
           </button>
+          <label className="engine-toggle" title="Regex is fast; ts-ast loads the TypeScript compiler for deeper parsing">
+            engine
+            <select value={parseMode} onChange={(e) => setParseMode(e.target.value as typeof parseMode)}>
+              <option value="regex">regex</option>
+              <option value="hybrid">ts-ast (ts)</option>
+              <option value="ast">ts-ast (all)</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={async () => {
@@ -368,6 +418,7 @@ export default function App() {
             onCompareSelect={setCompareWith}
           />
         }
+        fixesTab={<FixesTab analysis={analysis} selectedId={selectedId} onSelect={setSelectedId} />}
       />
       <main className="stage">
         <GraphControls

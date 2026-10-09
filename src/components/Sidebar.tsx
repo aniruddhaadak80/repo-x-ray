@@ -16,9 +16,10 @@ interface Props {
   onTraceCycle: (cycle: string[] | null) => void
   tracedCycle: string[] | null
   snapshotsTab: ReactNode
+  fixesTab: ReactNode
 }
 
-type Tab = 'files' | 'cycles' | 'metrics' | 'snapshots'
+type Tab = 'files' | 'cycles' | 'metrics' | 'fixes' | 'snapshots'
 
 const EXT_LABELS: { ext: Ext; label: string; color: string }[] = [
   { ext: 'ts', label: '.ts', color: '#3b82f6' },
@@ -77,7 +78,7 @@ export default function Sidebar(props: Props) {
       </section>
 
       <nav className="tabs" role="tablist">
-        {(['files', 'cycles', 'metrics', 'snapshots'] as Tab[]).map((t) => (
+        {(['files', 'cycles', 'metrics', 'fixes', 'snapshots'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -86,7 +87,7 @@ export default function Sidebar(props: Props) {
             className={`tab${tab === t ? ' active' : ''}`}
             onClick={() => setTab(t)}
           >
-            {t === 'cycles' ? `Cycles (${cycles.length})` : t === 'metrics' ? 'Metrics' : t === 'snapshots' ? 'Snapshots' : 'Files'}
+            {t === 'cycles' ? `Cycles (${cycles.length})` : t === 'metrics' ? 'Metrics' : t === 'fixes' ? 'Fixes' : t === 'snapshots' ? 'Snapshots' : 'Files'}
           </button>
         ))}
       </nav>
@@ -216,6 +217,8 @@ export default function Sidebar(props: Props) {
           <OrphanList analysis={analysis} onSelect={onSelect} />
         </section>
       )}
+
+      {tab === 'fixes' && <section className="panel">{props.fixesTab}</section>}
 
       {tab === 'snapshots' && <section className="panel">{props.snapshotsTab}</section>}
     </aside>

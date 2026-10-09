@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import type { Analysis, DepKind, Ext, FileInfo } from '../lib/types'
 
@@ -138,7 +138,7 @@ export default function GraphView({
         nodeId="id"
         nodeVal={(n: any) => Math.max(3, Math.min(26, Math.sqrt(n.loc) * 1.5 + n.problemCount * 2 + n.fanIn * 0.5))}
         nodeColor={(n: any) => colorFor(n as GNode)}
-        nodeLabel={(n: any) => `${n.name} â€” ${n.loc} LOC Â· ${n.fanIn} in / ${n.fanOut} out`}
+        nodeLabel={(n: any) => `${n.name} â€” ${n.loc} LOC · ${n.fanIn} in / ${n.fanOut} out`}
         linkColor={(l: any) => {
           if (l.inCycle) return CYCLE_COLOR
           if (selectedId && (l.source.id === selectedId || l.target.id === selectedId)) return '#94a3b8'
@@ -159,7 +159,7 @@ export default function GraphView({
         onEngineStop={() => fgRef.current?.zoomToFit?.(600, 60)}
         onNodeHover={(n: any) => {
           setHovered(
-            n ? { label: `${n.name} â€” ${n.loc} LOC Â· ${n.fanIn} in / ${n.fanOut} out${n.problemCount ? ` Â· ${n.problemCount} problem(s)` : ''}`, x: n.x, y: n.y } : null,
+            n ? { label: `${n.name} â€” ${n.loc} LOC · ${n.fanIn} in / ${n.fanOut} out${n.problemCount ? ` · ${n.problemCount} problem(s)` : ''}`, x: n.x, y: n.y } : null,
           )
         }}
         nodeCanvasObjectMode={(n: any) => {

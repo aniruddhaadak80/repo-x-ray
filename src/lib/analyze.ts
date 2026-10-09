@@ -1,5 +1,13 @@
-import type { Analysis, ConfigFile, DepKind, Ext, FileInfo, GraphEdge, Metrics, PackageInfo, RawFile } from './types'
+import type { Analysis, ConfigFile, DepIssue, DepKind, Ext, FileInfo, GraphEdge, Metrics, PackageInfo, RawFile } from './types'
 import { parseImports } from './parser'
+import { parseImportsAst } from './astParse'
+
+export interface AnalyzeOptions {
+  /** when provided, the TypeScript module is used for AST-based scanning */
+  tsLib?: typeof import('typescript')
+  /** 'regex' (default) | 'ast' | 'hybrid' (regex for .js, AST for .ts/.tsx) */
+  mode?: 'regex' | 'ast' | 'hybrid'
+}
 
 const RESOLVE_EXTS = ['tsx', 'ts', 'jsx', 'js', 'mts', 'cts', 'mjs', 'cjs']
 const ASSET_RE = /\.(css|scss|sass|less|json|svg|png|jpe?g|gif|webp|md|wasm|txt|ya?ml|toml|html|vue|svelte|astro|graphql)$/i
@@ -245,7 +253,7 @@ function detectPackages(files: FileInfo[], configs: ConfigFile[]): PackageInfo[]
   return packages.filter((p) => p.fileCount > 0)
 }
 
-function computeMetrics(files: FileInfo[], cycles: string[][], entries: Set<string>): Metrics {
+function computeMetrics(files: FileInfo[], cycles: string[][], entries: Set<string>, depIssues: DepIssue[] = [], depCount = 0): Metrics {
   const fanInTop = [...files].sort((a, b) => b.fanIn - a.fanIn).slice(0, 5)
   const fanOutTop = [...files].sort((a, b) => b.fanOut - a.fanOut).slice(0, 5)
   const mostUnstable = files
@@ -279,11 +287,67 @@ function computeMetrics(files: FileInfo[], cycles: string[][], entries: Set<stri
     entryPoints: [...entries],
     directoryCoupling,
     deepestChains: longestChains(files, cycles),
+    depIssues,
+    depCount,
   }
 }
 
-export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigFile[] = []): Analysis {
+/** Local-only dependency audit over collected package.json files. */
+function auditDependencies(configs: ConfigFile[]): DepIssue[] {
+  const issues: DepIssue[] = []
+  const seen = new Set<string>()
+  const push = (i: Omit<DepIssue, never>) => {
+    const key = `${i.declaredIn}|${i.kind}|${i.name}`
+    if (seen.has(key)) return
+    seen.add(key)
+    issues.push(i)
+  }
+  for (const cfg of configs) {
+    if (!cfg.path.endsWith('package.json') || !cfg.json) continue
+    const pkg = cfg.json as Record<string, unknown>
+    const groups: [string, DepIssue['kind']][] = [
+      ['dependencies', 'prod'],
+      ['devDependencies', 'dev'],
+      ['peerDependencies', 'peer'],
+      ['optionalDependencies', 'optional'],
+    ]
+    const prodNames = new Set(Object.keys((pkg.dependencies ?? {}) as Record<string, string>))
+    for (const [group, kind] of groups) {
+      const deps = (pkg[group] ?? {}) as Record<string, unknown>
+      for (const [name, spec] of Object.entries(deps)) {
+        const s = typeof spec === 'string' ? spec : ''
+        if (!s) {
+          push({ name, spec: '(empty)', kind, declaredIn: cfg.path, level: 'warn', message: 'Empty version — will resolve to latest at install time' })
+          continue
+        }
+        if (s === '*' || s === 'latest' || s === 'x') {
+          push({ name, spec: s, kind, declaredIn: cfg.path, level: 'warn', message: `Floating range '${s}' — non-reproducible installs` })
+        } else if (s.startsWith('workspace:')) {
+          push({ name, spec: s, kind, declaredIn: cfg.path, level: 'info', message: 'Workspace protocol — linked to a local package' })
+        } else if (/^(git|github:|gitlab:|bitbucket:|https?:)/.test(s)) {
+          push({ name, spec: s, kind, declaredIn: cfg.path, level: 'warn', message: 'Git/URL dependency — not semver, not auditable by registry tools' })
+        } else if (s.startsWith('file:') || s.startsWith('link:')) {
+          push({ name, spec: s, kind, declaredIn: cfg.path, level: 'info', message: 'Local path/link dependency' })
+        } else if (s.startsWith('npm:')) {
+          push({ name, spec: s, kind, declaredIn: cfg.path, level: 'info', message: 'npm: alias' })
+        }
+        if (kind === 'peer' && !prodNames.has(name) && !Object.keys((pkg.devDependencies ?? {}) as Record<string, string>).includes(name)) {
+          push({ name, spec: s, kind, declaredIn: cfg.path, level: 'info', message: 'Peer dependency — consumers must install it themselves' })
+        }
+      }
+    }
+  }
+  return issues
+}
+
+export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigFile[] = [], opts: AnalyzeOptions = {}): Analysis {
   const t0 = performance.now()
+  const mode = opts.mode ?? 'regex'
+  const tsLib = opts.tsLib
+  const parse = (text: string, ext: Ext) =>
+    tsLib && (mode === 'ast' || (mode === 'hybrid' && (ext === 'ts' || ext === 'tsx')))
+      ? parseImportsAst(text, ext, tsLib)
+      : parseImports(text)
   const filesSet = new Set(repoFiles.map((f) => f.path))
   const files: FileInfo[] = []
   const adjacency = new Map<string, string[]>()
@@ -296,7 +360,7 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
   let aliasedEdges = 0
 
   for (const f of repoFiles) {
-    const imports = parseImports(f.text)
+    const imports = parse(f.text, f.ext)
     const targets = new Set<string>()
     for (const ref of imports) {
       byKind[ref.kind]++
@@ -412,13 +476,23 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
     totalLoc += f.loc
   }
 
+  const depIssues = auditDependencies(configs)
+  let depCount = 0
+  for (const cfg of configs) {
+    if (!cfg.path.endsWith('package.json') || !cfg.json) continue
+    const pkg = cfg.json as Record<string, unknown>
+    for (const g of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+      depCount += Object.keys((pkg[g] ?? {}) as Record<string, unknown>).length
+    }
+  }
+
   return {
     rootName,
     files,
     edges,
     cycles,
     aliases: aliases.map((a) => ({ pattern: a.pattern, target: a.target })),
-    metrics: { ...computeMetrics(files, cycles, entrySet), deepestChains: deepest },
+    metrics: { ...computeMetrics(files, cycles, entrySet, depIssues, depCount), deepestChains: deepest },
     packages: detectPackages(files, configs),
     stats: {
       files: files.length,
@@ -431,6 +505,7 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
       byKind,
       loc: totalLoc,
       scannedMs: Math.round(performance.now() - t0),
+      engine: tsLib && mode !== 'regex' ? 'typescript-ast' : 'regex',
     },
   }
 }

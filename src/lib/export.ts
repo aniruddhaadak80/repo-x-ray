@@ -59,7 +59,20 @@ export function toMarkdown(analysis: Analysis): string {
   lines.push(`- Edges: ${s.edges} (${s.aliasedEdges} via aliases)`)
   lines.push(`- Circular dependencies: **${s.cycles}**`)
   lines.push(`- Unresolved imports: ${s.unresolved}`)
-  lines.push(`- Import kinds: esm ${s.byKind.esm}, type ${s.byKind.type}, dynamic ${s.byKind.dynamic}, require ${s.byKind.require}`)
+  lines.push('')
+  lines.push('## Import kinds')
+  lines.push('')
+  lines.push(`- esm: ${s.byKind.esm} · types: ${s.byKind.type} · dynamic: ${s.byKind.dynamic} · require: ${s.byKind.require}`)
+  lines.push(`- engine: ${s.engine} · scanned in ${s.scannedMs}ms`)
+  lines.push('')
+  if (analysis.metrics.depIssues.length) {
+    lines.push('## Dependency audit')
+    lines.push('')
+    for (const i of analysis.metrics.depIssues) {
+      lines.push(`- **${i.name}** (${i.kind}, ${i.declaredIn}) — ${i.message}`)
+    }
+    lines.push('')
+  }
   lines.push('')
   if (analysis.cycles.length) {
     lines.push('## Cycles')

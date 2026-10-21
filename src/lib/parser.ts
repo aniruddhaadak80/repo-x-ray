@@ -6,10 +6,71 @@ const DYNAMIC_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g
 const REQUIRE_RE = /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g
 const SUBPATH_RE = /\bimport\s*['"](#[^'"]+)['"]/g
 
+/**
+ * Remove comments, keeping string literals intact.
+ *
+ * A single left-to-right scan rather than a regex pass, because a `//` is
+ * only a comment when it is not inside a string: `import x from
+ * 'https://cdn.example.com/x.js'` is an import, and `code; // import y from
+ * './ghost'` is a comment. Newlines are preserved so line numbers still
+ * line up with the original file.
+ */
 function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/^[ \t]*\/\/.*$/gm, '')
+  let out = ''
+  let i = 0
+  const n = src.length
+  while (i < n) {
+    const ch = src[i]!
+    const next = i + 1 < n ? src[i + 1] : ''
+
+    // Line comment: // to end of line.
+    if (ch === '/' && next === '/') {
+      while (i < n && src[i] !== '\n') {
+        out += ' '
+        i += 1
+      }
+      continue
+    }
+
+    // Block comment: /* ... */
+    if (ch === '/' && next === '*') {
+      out += '  '
+      i += 2
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        out += src[i] === '\n' ? '\n' : ' '
+        i += 1
+      }
+      out += '  '
+      i = Math.min(n, i + 2)
+      continue
+    }
+
+    // String literal: copied verbatim, escapes included.
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch
+      out += ch
+      i += 1
+      while (i < n) {
+        if (src[i] === '\\') {
+          out += src[i] ?? ''
+          out += src[i + 1] ?? ''
+          i += 2
+          continue
+        }
+        out += src[i]!
+        if (src[i] === quote) {
+          i += 1
+          break
+        }
+        i += 1
+      }
+      continue
+    }
+
+    out += ch
+    i += 1
+  }
+  return out
 }
 
 function lineOf(src: string, index: number): number {

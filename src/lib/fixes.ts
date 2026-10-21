@@ -54,7 +54,9 @@ export function suggestUnresolvedFix(ref: ImportRef, file: FileInfo, analysis: A
       severity: 'warn',
     })
   }
-  if (ref.specifier.includes('/') && !ref.specifier.startsWith('.') && !ref.specifier.startsWith('@/')) {
+  // The analyzer only marks a non-relative specifier unresolved when it looks
+  // like a path alias, so this hint applies to exactly those imports.
+  if (ref.specifier.includes('/') && !ref.specifier.startsWith('.')) {
     out.push({
       id: `unresolved-alias:${file.id}:${ref.specifier}:${ref.line}`,
       title: 'Check your tsconfig/vite aliases',

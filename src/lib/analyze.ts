@@ -387,6 +387,12 @@ export function analyze(repoFiles: RawFile[], rootName: string, configs: ConfigF
             ref.resolved = resolved
             targets.add(resolved)
           } else markExternal()
+        } else if (ref.specifier.startsWith('@/')) {
+          // "@/..." is a path alias by convention, never a valid npm package
+          // name (npm scopes are "@scope/name"). If it did not resolve through
+          // the alias table it is a broken alias, not an external dependency.
+          ref.unresolved = true
+          unresolvedCount++
         } else markExternal()
       }
     }
